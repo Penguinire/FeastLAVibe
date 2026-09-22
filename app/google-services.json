@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "808973931023",
+    "project_id": "feast-and-vibe",
+    "storage_bucket": "feast-and-vibe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:808973931023:android:cb80b0fd2287b1151c897a",
+        "android_client_info": {
+          "package_name": "com.example.feastvibe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCvHJbMGpPaXxi5K_Ec3BG-rGk4h8XEc7A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

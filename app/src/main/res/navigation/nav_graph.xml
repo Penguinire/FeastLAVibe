@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/exploreFragment">
+
+    <fragment
+        android:id="@+id/exploreFragment"
+        android:name="com.example.feastvibe.ExploreFragment"
+        android:label="Explore"
+        tools:layout="@layout/activity_explore" />
+
+    <fragment
+        android:id="@+id/mapFragment"
+        android:name="com.example.feastvibe.MapFragment"
+        android:label="Map"
+        tools:layout="@layout/activity_map">
+        <argument
+            android:name="placeId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/favouritesFragment"
+        android:name="com.example.feastvibe.FavouritesFragment"
+        android:label="Favourites"
+        tools:layout="@layout/activity_favourites" />
+
+    <fragment
+        android:id="@+id/eventsFragment"
+        android:name="com.example.feastvibe.EventsFragment"
+        android:label="Events"
+        tools:layout="@layout/activity_events" />
+
+    <fragment
+        android:id="@+id/eventDetailFragment"
+        android:name="com.example.feastvibe.EventDetailFragment"
+        android:label="Event"
+        tools:layout="@layout/activity_event_detail">
+        <argument
+            android:name="eventId"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/profileFragment"
+        android:name="com.example.feastvibe.ProfileFragment"
+        android:label="Profile"
+        tools:layout="@layout/activity_profile" />
+
+    <fragment
+        android:id="@+id/searchFragment"
+        android:name="com.example.feastvibe.SearchFragment"
+        android:label="Search"
+        tools:layout="@layout/activity_search" />
+
+    <fragment
+        android:id="@+id/restaurantDetailFragment"
+        android:name="com.example.feastvibe.RestaurantDetailFragment"
+        android:label="Detail"
+        tools:layout="@layout/activity_restaurant_detail">
+        <argument
+            android:name="placeId"
+            app:argType="string"
+            android:defaultValue="neon_library" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/reviewsFragment"
+        android:name="com.example.feastvibe.ReviewsFragment"
+        android:label="Reviews"
+        tools:layout="@layout/activity_reviews">
+        <argument
+            android:name="placeId"
+            app:argType="string"
+            android:defaultValue="central_012" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/filtersFragment"
+        android:name="com.example.feastvibe.FiltersFragment"
+        android:label="Filters"
+        tools:layout="@layout/activity_filters" />
+
+    <fragment
+        android:id="@+id/loginFragment"
+        android:name="com.example.feastvibe.LoginFragment"
+        android:label="Sign In"
+        tools:layout="@layout/activity_login" />
+
+    <fragment
+        android:id="@+id/signupFragment"
+        android:name="com.example.feastvibe.SignupFragment"
+        android:label="Sign Up"
+        tools:layout="@layout/activity_signup" />
+
+</navigation>

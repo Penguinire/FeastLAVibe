@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand -->
+    <color name="pink_primary">#FF4D6D</color>
+    <color name="pink_primary_dark">#E63E5C</color>
+    <color name="pink_light">#FF7A93</color>
+
+    <!-- Dark Theme Surfaces -->
+    <color name="background_dark">#0D0D0D</color>
+    <color name="surface_dark">#1A1A1A</color>
+    <color name="surface_variant">#242424</color>
+    <color name="card_dark">#1C1C1C</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="text_hint">#808080</color>
+
+    <!-- Other -->
+    <color name="star_yellow">#FFD700</color>
+    <color name="divider">#333333</color>
+    <color name="chip_unselected">#2A2A2A</color>
+    <color name="open_green">#4CAF50</color>
+
+    <!-- Light theme fallbacks (not used much) -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="marker_orange">#FF9800</color>
+    <color name="marker_purple">#9C27B0</color>
+    <color name="marker_blue">#4285F4</color>
+</resources>
