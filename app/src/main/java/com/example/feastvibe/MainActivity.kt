@@ -95,7 +95,7 @@ class MainActivity : AppCompatActivity() {
                 insets
             }
 
-            Log.d("FeastStartup", "7. MainActivity setup completed")
+            Log.d("FeastStartup", "7. MainActivity setup completeds")
         }
     }
 }
