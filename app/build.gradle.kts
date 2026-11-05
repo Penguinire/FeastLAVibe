@@ -13,7 +13,7 @@ val localProperties = Properties().apply {
     }
 }
 
-val geoapifyApiKey = localProperties.getProperty("GEOAPIFY_API_KEY", "")
+val geoapifyApiKey = "acb0db1689464fa997348ad5abc57a87"
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
 
