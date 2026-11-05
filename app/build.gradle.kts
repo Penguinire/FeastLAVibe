@@ -1,12 +1,29 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     id("com.google.gms.google-services")
 
 }
 
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+val geoapifyApiKey = localProperties.getProperty("GEOAPIFY_API_KEY", "")
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "com.example.feastvibe"
     compileSdk = 35
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "com.example.feastvibe"
@@ -15,6 +32,12 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "GEOAPIFY_API_KEY",
+            "\"$geoapifyApiKey\""
+        )
     }
 
     buildTypes {
@@ -52,15 +75,12 @@ dependencies {
     implementation("androidx.navigation:navigation-fragment-ktx:2.8.5")
     implementation("androidx.navigation:navigation-ui-ktx:2.8.5")
 
-    // Mapbox — Maps SDK (displays the map itself)
-    // "-ndk27" variant required for 16 KB page-size compatibility (Google Play requirement
-    // for apps targeting Android 15+ as of Nov 1, 2025)
-    implementation("com.mapbox.maps:android-ndk27:11.31.0")
+    // MapLibre map renderer
+    implementation("org.maplibre.gl:android-sdk:13.6.1")
 
-    // Mapbox — Search SDK (text search + category/nearby search only)
-    implementation("com.mapbox.search:mapbox-search-android-ndk27:2.31.0")
-    implementation("com.mapbox.search:place-autocomplete-ndk27:2.31.0")
-    implementation("com.mapbox.search:discover-ndk27:2.31.0")
+// Device location
+    implementation("com.google.android.gms:play-services-location:21.4.0")
+
     implementation("com.google.android.gms:play-services-location:21.4.0")
 
     // Events — Ticketmaster (Bear)
@@ -74,6 +94,11 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("com.google.firebase:firebase-analytics")
+
+    // Instrumented testing
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
 
     testImplementation("junit:junit:4.13.2")
 }

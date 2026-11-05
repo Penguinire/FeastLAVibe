@@ -1,14 +1,15 @@
 package com.example.feastvibe
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.ImageView
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
@@ -17,7 +18,6 @@ import com.google.android.flexbox.FlexboxLayout
 class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-
         val placeId = arguments?.getString("placeId") ?: "central_012"
         val place = DummyData.byId(placeId)
 
@@ -29,27 +29,52 @@ class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
         view.findViewById<TextView>(R.id.tv_detail_rating).text =
             if (place.rating != null) "★ ${place.rating}" else "New"
         view.findViewById<TextView>(R.id.tv_detail_review_count).text =
-            if (place.reviewCount != null) "(${place.reviewCount} authentic reviews)" else "(No reviews yet)"
+            if (place.reviewCount != null) "(${place.reviewCount} ratings)" else "(No ratings available)"
 
-        view.findViewById<TextView>(R.id.tv_open_badge).text =
-            if (place.isOpen) "● Open Now" else "● Closed"
-        view.findViewById<TextView>(R.id.tv_open_badge).setTextColor(
-            resources.getColor(if (place.isOpen) R.color.open_green else R.color.text_secondary, null)
+        val openBadge = view.findViewById<TextView>(R.id.tv_open_badge)
+
+        openBadge.visibility =
+            if (place.isOpen == null) View.GONE else View.VISIBLE
+
+        openBadge.text = when (place.isOpen) {
+            true -> "● Open Now"
+            false -> "● Closed"
+            null -> ""
+        }
+
+        openBadge.setTextColor(
+            resources.getColor(
+                if (place.isOpen == true) {
+                    R.color.open_green
+                } else {
+                    R.color.text_secondary
+                },
+                null
+            )
         )
 
         view.findViewById<View>(R.id.tv_detail_generator).visibility =
             if (place.generatorBackup) View.VISIBLE else View.GONE
 
         view.findViewById<TextView>(R.id.tv_detail_about).text =
-            "Sample description for ${place.name}, a fictional Feast & Vibe venue in ${place.area}. " +
-                    "Real venue descriptions will come from the Google Places API once connected."
+            "Venue information and descriptions are not available yet."
 
         view.findViewById<TextView>(R.id.tv_detail_address).text = "${place.area}, South Africa"
 
+
         bindHighlights(view, place)
-        bindOpeningHours(view)
-        bindRatingBars(view.findViewById(R.id.rating_bars))
-        bindReviewPreviews(view)
+        // Hide placeholder information until verified data is available.
+        listOf(
+            R.id.hours_1,
+            R.id.hours_2,
+            R.id.hours_3,
+            R.id.rating_bars,
+            R.id.review_1,
+            R.id.review_2,
+            R.id.btn_view_all_reviews
+        ).forEach { id ->
+            view.findViewById<View>(id).visibility = View.GONE
+        }
         bindActions(view, place)
 
         view.findViewById<View>(R.id.iv_detail_back).setOnClickListener {
@@ -83,8 +108,6 @@ class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
                 bundleOf("placeId" to place.id)
             )
         }
-        view.findViewById<View>(R.id.tv_detail_review_count).setOnClickListener { openReviews() }
-        view.findViewById<View>(R.id.btn_view_all_reviews).setOnClickListener { openReviews() }
     }
 
     private fun bindActions(view: View, place: Place) {
@@ -93,14 +116,26 @@ class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
         directions.findViewById<TextView>(R.id.tv_action_label).text = "Directions"
         directions.setOnClickListener { MapDirections.launch(this, place) }
 
+
         val call = view.findViewById<View>(R.id.action_call)
         call.findViewById<TextView>(R.id.tv_action_icon).text = "📞"
         call.findViewById<TextView>(R.id.tv_action_label).text = "Call"
         call.setOnClickListener {
-            if (place.phone != null) {
-                startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${place.phone}")))
+            val phone = place.phone?.trim().orEmpty()
+
+            if (phone.isBlank()) {
+                Toast.makeText(
+                    requireContext(),
+                    "No phone number available",
+                    Toast.LENGTH_SHORT
+                ).show()
             } else {
-                Toast.makeText(context, "No phone number available", Toast.LENGTH_SHORT).show()
+                startActivity(
+                    Intent(
+                        Intent.ACTION_DIAL,
+                        Uri.parse("tel:$phone")
+                    )
+                )
             }
         }
 
@@ -108,12 +143,38 @@ class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
         website.findViewById<TextView>(R.id.tv_action_icon).text = "🌐"
         website.findViewById<TextView>(R.id.tv_action_label).text = "Website"
         website.setOnClickListener {
-            if (place.website != null) {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://${place.website}")))
+            val address = place.website?.trim().orEmpty()
+
+            if (address.isBlank()) {
+                Toast.makeText(
+                    requireContext(),
+                    "No website available",
+                    Toast.LENGTH_SHORT
+                ).show()
             } else {
-                Toast.makeText(context, "No website available", Toast.LENGTH_SHORT).show()
+                val url = if (
+                    address.startsWith("https://", ignoreCase = true) ||
+                    address.startsWith("http://", ignoreCase = true)
+                ) {
+                    address
+                } else {
+                    "https://$address"
+                }
+
+                try {
+                    startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    )
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(
+                        requireContext(),
+                        "No browser is available to open this website",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
+
 
         val menu = view.findViewById<View>(R.id.action_menu)
         menu.findViewById<TextView>(R.id.tv_action_icon).text = "🍽"
@@ -174,6 +235,7 @@ class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
             val spacer = (row.findViewById<LinearLayout>(R.id.bar_track)).getChildAt(1)
             val spacerParams = spacer.layoutParams as LinearLayout.LayoutParams
             spacerParams.weight = (100 - percent).toFloat()
+
             spacer.layoutParams = spacerParams
 
             container.addView(row)

@@ -1,7 +1,7 @@
 package com.example.feastvibe
 
 /**
- * In-memory cache of real (Mapbox-sourced) places, keyed by their Mapbox ID.
+ * In-memory cache of real (real search results), keyed by their Mapbox ID.
  * DummyData.byId() checks this first. Without it, a real search result's ID
  * wouldn't be found later (e.g. from RestaurantDetailFragment or MapFragment),
  * and would silently fall back to the wrong dummy place.

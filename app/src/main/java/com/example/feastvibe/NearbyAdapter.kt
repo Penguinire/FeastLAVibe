@@ -44,7 +44,8 @@ class NearbyAdapter(
             "New"
         }
         holder.price.text = p.price ?: ""
-        holder.openBadge.visibility = if (p.isOpen) View.VISIBLE else View.GONE
+        holder.openBadge.visibility =
+            if (p.isOpen == true) View.VISIBLE else View.GONE
         holder.distance.text = "↗ ${p.distanceKm} km away"
 
         // Local-only toggle — not persisted until Firebase favourites are connected.

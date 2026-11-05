@@ -47,13 +47,6 @@
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="PRETORIA"
-                    android:textColor="@color/pink_primary"
-                    android:textSize="10sp"
-                    android:letterSpacing="0.1" />
             </LinearLayout>
 
             <TextView
@@ -104,17 +97,6 @@
                     android:textColor="@color/text_primary"
                     android:textSize="13sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_pill_outline_pink"
-                    android:gravity="center"
-                    android:paddingHorizontal="14dp"
-                    android:text="🔥 VIBE METER: HOT"
-                    android:textColor="@color/pink_primary"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
             </LinearLayout>
         </HorizontalScrollView>
 
@@ -354,6 +336,18 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/tv_information_disclaimer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="12dp"
+                android:gravity="center"
+                android:text="Venue information, opening hours, events and other details are supplied by third-party sources. Feast &amp; Vibe cannot guarantee that all information is accurate, complete or up to date."
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

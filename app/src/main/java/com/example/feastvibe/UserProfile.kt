@@ -7,8 +7,13 @@ data class UserProfile(
     var fullName: String = "",
     var email: String = "",
     var location: String = "",
-    @get:PropertyName("photoUrl") @set:PropertyName("photoUrl")
+
+    @get:PropertyName("photoUrl")
+    @set:PropertyName("photoUrl")
     var photoUrl: String = "",
+
+    var photoBase64: String = "",
+
     var memberSince: Long = System.currentTimeMillis(),
     var reviewCount: Int = 0,
     var favouritesCount: Int = 0,

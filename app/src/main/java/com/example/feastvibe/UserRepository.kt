@@ -27,4 +27,20 @@ class UserRepository(
             Result.failure(e)
         }
     }
+
+    suspend fun updateProfile(profile: UserProfile): Result<Unit> {
+        return try {
+            usersCollection()
+                .document(profile.uid)
+                .set(
+                    profile,
+                    com.google.firebase.firestore.SetOptions.merge()
+                )
+                .await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

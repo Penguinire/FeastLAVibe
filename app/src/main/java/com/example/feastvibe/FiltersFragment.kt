@@ -11,11 +11,11 @@ import com.google.android.material.materialswitch.MaterialSwitch
 
 class FiltersFragment : Fragment(R.layout.activity_filters) {
 
-    private var selectedType: PlaceType? = null // null = "All"
+    private var selectedType: PlaceType? = null
     private val selectedCuisines = mutableSetOf<String>()
-    private var selectedPrice: String? = "R150-R300"
-    private var selectedMinRating: Double = 4.5
-    private var loadsheddingOnly = false
+    private var selectedPrice: String? = null
+    private var selectedMinRating: Double = 0.0
+
 
     private lateinit var resultsButton: TextView
     private lateinit var openNowSwitch: MaterialSwitch
@@ -40,7 +40,6 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
         setupCuisineChips(view)
         setupSpendRow(view)
         setupRatingRow(view)
-        setupLoadshedding(view)
 
         openNowSwitch.setOnCheckedChangeListener { _, _ -> updateResultCount() }
         within5kmSwitch.setOnCheckedChangeListener { _, _ -> updateResultCount() }
@@ -51,9 +50,11 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
     private fun setupPlaceTypeChips(view: View) {
         val wrap = view.findViewById<FlexboxLayout>(R.id.type_chip_wrap)
         val options = listOf(
-            "All" to null, "Restaurant" to PlaceType.RESTAURANT,
-            "Fast Food" to PlaceType.FAST_FOOD, "Coffee" to PlaceType.FAST_FOOD,
-            "Bars" to PlaceType.BAR, "Clubs" to PlaceType.CLUB
+            "All" to null,
+            "Restaurant" to PlaceType.RESTAURANT,
+            "Fast Food" to PlaceType.FAST_FOOD,
+            "Bars" to PlaceType.BAR,
+            "Clubs" to PlaceType.CLUB
         )
         val chips = mutableListOf<TextView>()
         options.forEach { (label, type) ->
@@ -72,9 +73,7 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
         val wrap = view.findViewById<FlexboxLayout>(R.id.cuisine_chip_wrap)
         val options = listOf("African", "Braai", "Italian", "Pizza", "Burgers", "Asian", "Café")
         options.forEach { label ->
-            val isPreselected = label == "Braai"
-            if (isPreselected) selectedCuisines.add(label)
-            val chip = makeChip(label, selected = isPreselected)
+            val chip = makeChip(label, selected = false)
             addToFlexbox(wrap, chip)
             chip.setOnClickListener {
                 if (selectedCuisines.contains(label)) {
@@ -121,16 +120,6 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
         }
     }
 
-    private fun setupLoadshedding(view: View) {
-        val row = view.findViewById<View>(R.id.loadshedding_row)
-        val check = view.findViewById<TextView>(R.id.tv_loadshedding_check)
-        row.setOnClickListener {
-            loadsheddingOnly = !loadsheddingOnly
-            check.text = if (loadsheddingOnly) "✓" else ""
-            updateResultCount()
-        }
-    }
-
     private fun applyToExplore() {
         FilterState.type = selectedType
         FilterState.cuisines = selectedCuisines.toSet()
@@ -138,7 +127,6 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
         FilterState.minRating = selectedMinRating
         FilterState.openNowOnly = openNowSwitch.isChecked
         FilterState.within5kmOnly = within5kmSwitch.isChecked
-        FilterState.loadsheddingOnly = loadsheddingOnly
         FilterState.isActive = true
     }
 
@@ -148,10 +136,8 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
         selectedCuisines.clear()
         selectedPrice = null
         selectedMinRating = 0.0
-        loadsheddingOnly = false
         openNowSwitch.isChecked = false
         within5kmSwitch.isChecked = false
-        view.findViewById<TextView>(R.id.tv_loadshedding_check).text = ""
         // Simplest reliable reset: rebuild every chip row from scratch.
         view.findViewById<FlexboxLayout>(R.id.type_chip_wrap).removeAllViews()
         view.findViewById<FlexboxLayout>(R.id.cuisine_chip_wrap).removeAllViews()
@@ -174,10 +160,10 @@ class FiltersFragment : Fragment(R.layout.activity_filters) {
                                 place.cuisine.contains(c, ignoreCase = true)
                     }) &&
                     (selectedPrice == null || place.price == selectedPrice) &&
-                    (place.rating == null || place.rating >= selectedMinRating) &&
-                    (!openNowSwitch.isChecked || place.isOpen) &&
-                    (!within5kmSwitch.isChecked || place.distanceKm <= 5.0) &&
-                    (!loadsheddingOnly || place.generatorBackup)
+                    (selectedMinRating == 0.0 ||
+                            (place.rating != null && place.rating >= selectedMinRating)) &&
+                    (!openNowSwitch.isChecked || place.isOpen == true) &&
+                    (!within5kmSwitch.isChecked || place.distanceKm <= 5.0)
         }
         resultsButton.text = "Show ${matches.size} Results"
     }

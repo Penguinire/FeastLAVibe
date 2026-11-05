@@ -126,6 +126,20 @@
                 android:layout_marginStart="8dp" android:background="@drawable/bg_chip_unselected"
                 android:gravity="center" android:paddingHorizontal="14dp" android:text="Menlyn"
                 android:textColor="@color/text_primary" android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/btn_search_filters"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_selected"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="⚙ Filters"
+                android:textColor="@color/white"
+                android:textSize="12sp" />
         </LinearLayout>
     </HorizontalScrollView>
 

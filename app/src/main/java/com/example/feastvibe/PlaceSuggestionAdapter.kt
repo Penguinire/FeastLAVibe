@@ -45,7 +45,7 @@ class PlaceSuggestionAdapter(
         val text = items[position]
 
         holder.title.text = text
-        holder.subtitle.text = "Mapbox suggestion"
+        holder.subtitle.text = "Place suggestion"
 
         holder.itemView.setOnClickListener {
             onClick(position)

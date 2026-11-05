@@ -68,7 +68,6 @@ private interface TicketmasterApi {
  *
  * The API key here is the team's shared dev key, kept inline for coursework
  * convenience. Beyond a student project this belongs in a non-committed
- * local.properties/BuildConfig value instead — same caution as the Mapbox token.
  */
 object EventRepository {
 

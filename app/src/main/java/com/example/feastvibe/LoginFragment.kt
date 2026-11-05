@@ -27,6 +27,15 @@ class LoginFragment : Fragment(R.layout.activity_login) {
         buttonSignIn = view.findViewById(R.id.button_sign_in)
         progress = view.findViewById(R.id.progress_login)
 
+        view.findViewById<MaterialButton>(R.id.button_back_to_explore)
+            .setOnClickListener {
+                val navController = findNavController()
+
+                if (!navController.popBackStack(R.id.exploreFragment, false)) {
+                    navController.navigate(R.id.exploreFragment)
+                }
+            }
+
         buttonSignIn.setOnClickListener { attemptLogin() }
         view.findViewById<TextView>(R.id.text_go_to_signup).setOnClickListener {
             findNavController().navigate(R.id.signupFragment)

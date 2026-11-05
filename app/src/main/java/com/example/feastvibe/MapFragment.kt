@@ -2,10 +2,6 @@ package com.example.feastvibe
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
@@ -25,16 +21,17 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.mapbox.geojson.Point
-import com.mapbox.maps.CameraOptions
-import com.mapbox.maps.MapView
-import com.mapbox.maps.Style
-import com.mapbox.maps.plugin.annotation.annotations
-import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
-import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
-import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
-import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
-import com.mapbox.maps.plugin.locationcomponent.location
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
+import org.maplibre.android.annotations.Marker
+import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -47,17 +44,16 @@ class MapFragment : Fragment(R.layout.activity_map) {
     private lateinit var rootView: View
 
     private var mapView: MapView? = null
-
+    private var mapLibreMap: MapLibreMap? = null
+    private val mapMarkers = mutableListOf<Marker>()
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    private var currentLocation: Point? = null
+    private var currentLocation: GeoPoint? = null
+    private var weatherJob: Job? = null
 
-    private var annotationManager: PointAnnotationManager? = null
-
-    private var markerBitmap: Bitmap? = null
 
     private val pretoriaCbd =
-        Point.fromLngLat(
+        GeoPoint.fromLngLat(
             28.1881,
             -25.7461
         )
@@ -92,8 +88,8 @@ class MapFragment : Fragment(R.layout.activity_map) {
             )
 
         /*
-         * If we arrived here from Restaurant Details,
-         * load the selected place.
+- If we arrived here from Restaurant Details,
+- load the selected place.
          */
         arguments
             ?.getString("placeId")
@@ -110,9 +106,12 @@ class MapFragment : Fragment(R.layout.activity_map) {
 
         setupMap(view)
 
-        requestLocation()
-
         setupInlineSearch(view)
+
+        // Show Pretoria weather initially until device location is available.
+        updateMapWeather(pretoriaCbd)
+
+        requestLocation()
 
         view
             .findViewById<View>(R.id.card_place)
@@ -147,82 +146,99 @@ class MapFragment : Fragment(R.layout.activity_map) {
         setupChips(view)
     }
 
-    /**
-     * =========================================================
-     * MAP SETUP
-     * =========================================================
-     */
-    private fun setupMap(view: View) {
+    override fun onDestroyView() {
+        weatherJob?.cancel()
+        weatherJob = null
 
-        val map =
-            view.findViewById<MapView>(
-                R.id.mapView
-            )
+        mapView?.onDestroy()
+        mapView = null
+        mapLibreMap = null
+        mapMarkers.clear()
 
-        mapView = map
+        super.onDestroyView()
+    }
 
-        map.mapboxMap.setCamera(
-            CameraOptions.Builder()
-                .center(
-                    Point.fromLngLat(
-                        selected?.lng
-                            ?: pretoriaCbd.longitude(),
+    private fun updateMapWeather(point: GeoPoint) {
+        weatherJob?.cancel()
 
-                        selected?.lat
-                            ?: pretoriaCbd.latitude()
-                    )
-                )
-                .zoom(15.5)
-                .build()
+        val weatherView = rootView.findViewById<TextView>(
+            R.id.tv_map_weather
         )
 
-        // Markers are only created AFTER the style finishes loading — creating
-        // the annotation manager or adding markers earlier is a race condition
-        // that can silently show zero markers on a slower load.
-        map.mapboxMap.loadStyle(Style.MAPBOX_STREETS) {
+        weatherView.text = "🌡️ Updating..."
 
-            enableLocationPuck()
+        weatherJob = viewLifecycleOwner.lifecycleScope.launch {
+            val temperature = WeatherRepository.getTemperature(point)
 
-            annotationManager =
-                map.annotations
-                    .createPointAnnotationManager()
+            if (!isAdded) return@launch
 
-            val current = selected
-
-            if (current != null) {
-                placeMarker(current)
+            weatherView.text = if (temperature != null) {
+                "🌡️ ${temperature.toInt()}°C"
             } else {
-                replaceMarkersWithSearchResults(defaultNearbyPlaces())
+                "🌡️ Weather unavailable"
             }
-
-            annotationManager
-                ?.addClickListener(
-                    OnPointAnnotationClickListener { annotation ->
-
-                        val placeId =
-                            annotation
-                                .getData()
-                                ?.asString
-
-                        if (placeId != null) {
-
-                            selected =
-                                PlaceCache.get(placeId)
-                                    ?: DummyData.byId(placeId)
-
-                            bindCard()
-                        }
-
-                        true
-                    }
-                )
         }
     }
 
     /**
-     * =========================================================
-     * DEFAULT MAP PLACES
-     * =========================================================
+    - =========================================================
+    - MAP SETUP
+    - =========================================================
+     */
+    private fun setupMap(view: View) {
+        val map = view.findViewById<MapView>(R.id.mapView)
+        mapView = map
+
+        map.onCreate(null)
+
+        map.getMapAsync { loadedMap ->
+            mapLibreMap = loadedMap
+
+            val styleUrl =
+                "https://maps.geoapify.com/v1/styles/osm-carto/style.json" +
+                        "?apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
+
+            loadedMap.setStyle(styleUrl) {
+                val initialPoint = LatLng(
+                    selected?.lat ?: pretoriaCbd.latitude(),
+                    selected?.lng ?: pretoriaCbd.longitude()
+                )
+
+                loadedMap.cameraPosition = CameraPosition.Builder()
+                    .target(initialPoint)
+                    .zoom(15.5)
+                    .build()
+
+                val current = selected
+
+                if (current != null) {
+                    placeMarker(current)
+                } else {
+                    replaceMarkersWithSearchResults(defaultNearbyPlaces())
+                }
+
+                loadedMap.setOnMarkerClickListener { marker ->
+                    val placeId = marker.snippet
+
+                    if (!placeId.isNullOrBlank()) {
+                        selected = PlaceCache.get(placeId)
+                            ?: DummyData.byId(placeId)
+
+                        bindCard()
+                    }
+
+                    true
+                }
+
+                enableLocationPuck()
+            }
+        }
+    }
+
+    /**
+    - =========================================================
+    - DEFAULT MAP PLACES
+    - =========================================================
      */
     private fun defaultNearbyPlaces(): List<Place> {
 
@@ -240,122 +256,48 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * CREATE ONE MAP MARKER
-     * =========================================================
+    - =========================================================
+    - CREATE ONE MAP MARKER
+    - =========================================================
      */
-    private fun placeMarker(
-        place: Place
-    ) {
+    private fun placeMarker(place: Place) {
+        val map = mapLibreMap ?: return
 
-        val bitmap =
-            markerBitmap
-                ?: createMarkerBitmap()
-                    .also {
-                        markerBitmap = it
-                    }
+        val marker = map.addMarker(
+            MarkerOptions()
+                .position(LatLng(place.lat, place.lng))
+                .title(place.name)
+                .snippet(place.id)
+        )
 
-        val point =
-            Point.fromLngLat(
-                place.lng,
-                place.lat
-            )
-
-        val options =
-            PointAnnotationOptions()
-                .withPoint(point)
-                .withIconImage(bitmap)
-                .withData(
-                    com.google.gson.JsonPrimitive(
-                        place.id
-                    )
-                )
-
-        annotationManager
-            ?.create(options)
+        if (marker != null) {
+            mapMarkers.add(marker)
+        }
     }
 
     /**
-     * =========================================================
-     * REPLACE MAP MARKERS
-     * =========================================================
+    - =========================================================
+    - REPLACE MAP MARKERS
+    - =========================================================
      */
-    private fun replaceMarkersWithSearchResults(
-        places: List<Place>
-    ) {
+    private fun replaceMarkersWithSearchResults(places: List<Place>) {
+        val map = mapLibreMap ?: return
 
-        annotationManager?.deleteAll()
+        mapMarkers.forEach { marker ->
+            map.removeMarker(marker)
+        }
+
+        mapMarkers.clear()
 
         places.forEach { place ->
-
             placeMarker(place)
         }
     }
 
     /**
-     * =========================================================
-     * CREATE PINK MARKER
-     * =========================================================
-     */
-    private fun createMarkerBitmap(): Bitmap {
-
-        val size = 64
-
-        val bitmap =
-            Bitmap.createBitmap(
-                size,
-                size,
-                Bitmap.Config.ARGB_8888
-            )
-
-        val canvas =
-            Canvas(bitmap)
-
-        val paint =
-            Paint(Paint.ANTI_ALIAS_FLAG)
-                .apply {
-
-                    color =
-                        Color.parseColor(
-                            "#FF4D6D"
-                        )
-                }
-
-        canvas.drawCircle(
-            size / 2f,
-            size / 2f,
-            size / 2f - 4f,
-            paint
-        )
-
-        val borderPaint =
-            Paint(Paint.ANTI_ALIAS_FLAG)
-                .apply {
-
-                    color =
-                        Color.WHITE
-
-                    style =
-                        Paint.Style.STROKE
-
-                    strokeWidth =
-                        4f
-                }
-
-        canvas.drawCircle(
-            size / 2f,
-            size / 2f,
-            size / 2f - 4f,
-            borderPaint
-        )
-
-        return bitmap
-    }
-
-    /**
-     * =========================================================
-     * MAP SEARCH
-     * =========================================================
+    - =========================================================
+    - MAP SEARCH
+    - =========================================================
      */
     private fun setupInlineSearch(
         view: View
@@ -395,15 +337,15 @@ class MapFragment : Fragment(R.layout.activity_map) {
             )
 
         /*
-         * This Job is IMPORTANT.
+- This Job is IMPORTANT.
          *
-         * When the user types:
+- When the user types:
          *
-         * piz
-         * pizz
-         * pizza
+- piz
+- pizz
+- pizza
          *
-         * the previous request is cancelled.
+- the previous request is cancelled.
          */
         var suggestionJob: Job? = null
 
@@ -414,38 +356,26 @@ class MapFragment : Fragment(R.layout.activity_map) {
 
                 selected = place
 
-                /*
-                 * Save the real Mapbox place.
-                 */
+
                 PlaceCache.putAll(
                     listOf(place)
                 )
 
                 /*
-                 * Update bottom card.
+- Update bottom card.
                  */
                 bindCard()
 
                 /*
-                 * Move map to selected place.
+- Move map to selected place.
                  */
-                mapView
-                    ?.mapboxMap
-                    ?.setCamera(
-
-                        CameraOptions.Builder()
-                            .center(
-                                Point.fromLngLat(
-                                    place.lng,
-                                    place.lat
-                                )
-                            )
-                            .zoom(15.5)
-                            .build()
-                    )
+                mapLibreMap?.cameraPosition = CameraPosition.Builder()
+                    .target(LatLng(place.lat, place.lng))
+                    .zoom(15.5)
+                    .build()
 
                 /*
-                 * Keep the selected place's marker visible.
+- Keep the selected place's marker visible.
                  */
                 replaceMarkersWithSearchResults(
                     listOf(place)
@@ -462,9 +392,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
             }
 
         /*
-         * -----------------------------------------------------
-         * OPEN SEARCH
-         * -----------------------------------------------------
+- -----------------------------------------------------
+- OPEN SEARCH
+- -----------------------------------------------------
          */
         label.setOnClickListener {
 
@@ -487,9 +417,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
         }
 
         /*
-         * -----------------------------------------------------
-         * CANCEL SEARCH
-         * -----------------------------------------------------
+- -----------------------------------------------------
+- CANCEL SEARCH
+- -----------------------------------------------------
          */
         cancel.setOnClickListener {
 
@@ -506,14 +436,14 @@ class MapFragment : Fragment(R.layout.activity_map) {
         }
 
         /*
-         * -----------------------------------------------------
-         * LIVE SEARCH
-         * -----------------------------------------------------
+- -----------------------------------------------------
+- LIVE SEARCH
+- -----------------------------------------------------
          */
         input.addTextChangedListener { text ->
 
             /*
-             * Cancel the previous search.
+- Cancel the previous search.
              */
             suggestionJob?.cancel()
 
@@ -524,7 +454,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
                     .orEmpty()
 
             /*
-             * Don't search tiny queries.
+- Don't search tiny queries.
              */
             if (query.length < 3) {
 
@@ -535,7 +465,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
             }
 
             /*
-             * Start a new search job.
+- Start a new search job.
              */
             suggestionJob =
                 viewLifecycleOwner
@@ -543,24 +473,23 @@ class MapFragment : Fragment(R.layout.activity_map) {
                     .launch {
 
                         /*
-                         * Wait until the user stops typing.
+- Wait until the user stops typing.
                          *
-                         * This prevents:
+- This prevents:
                          *
-                         * p
-                         * pi
-                         * piz
-                         * pizz
-                         * pizza
+- p
+- pi
+- piz
+- pizz
+- pizza
                          *
-                         * from all immediately hitting Mapbox.
                          */
                         delay(650)
 
                         /*
-                         * Use current device location when available.
+- Use current device location when available.
                          *
-                         * Otherwise use Pretoria CBD.
+- or use Pretoria CBD.
                          */
                         val origin =
                             currentLocation
@@ -587,15 +516,15 @@ class MapFragment : Fragment(R.layout.activity_map) {
                             }
 
                         /*
-                         * Fragment may have been destroyed.
+- Fragment may have been destroyed.
                          */
                         if (!isAdded) {
                             return@launch
                         }
 
                         /*
-                         * Check whether the user typed something
-                         * newer while the request was running.
+- Check whether the user typed something
+- newer while the request was running.
                          */
                         if (
                             input.text
@@ -612,7 +541,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
                                 .orEmpty()
 
                         /*
-                         * No results.
+- No results.
                          */
                         if (places.isEmpty()) {
 
@@ -620,7 +549,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
                                 View.GONE
 
                             /*
-                             * Clear search markers.
+- Clear search markers.
                              */
                             replaceMarkersWithSearchResults(
                                 emptyList()
@@ -629,15 +558,13 @@ class MapFragment : Fragment(R.layout.activity_map) {
                             return@launch
                         }
 
-                        /*
-                         * Save real Mapbox places.
-                         */
+
                         PlaceCache.putAll(
                             places
                         )
 
                         /*
-                         * Give the places to the RecyclerView.
+- Give the places to the RecyclerView.
                          */
                         resultsList.adapter =
                             adapter
@@ -647,10 +574,10 @@ class MapFragment : Fragment(R.layout.activity_map) {
                         )
 
                         /*
-                         * IMPORTANT:
+- IMPORTANT:
                          *
-                         * The SAME real places are also put
-                         * onto the map.
+- The SAME real places are also put
+- onto the map.
                          */
                         replaceMarkersWithSearchResults(
                             places
@@ -662,9 +589,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
         }
 
         /*
-         * -----------------------------------------------------
-         * KEYBOARD SEARCH BUTTON
-         * -----------------------------------------------------
+- -----------------------------------------------------
+- KEYBOARD SEARCH BUTTON
+- -----------------------------------------------------
          */
         input.setOnEditorActionListener {
                 _,
@@ -701,12 +628,12 @@ class MapFragment : Fragment(R.layout.activity_map) {
             }
 
             /*
-             * Cancel live autocomplete.
+- Cancel live autocomplete.
              */
             suggestionJob?.cancel()
 
             /*
-             * Final search.
+- Final search.
              */
             viewLifecycleOwner
                 .lifecycleScope
@@ -749,14 +676,14 @@ class MapFragment : Fragment(R.layout.activity_map) {
                     }
 
                     /*
-                     * Save results.
+- Save results.
                      */
                     PlaceCache.putAll(
                         outcome.places
                     )
 
                     /*
-                     * Show results in list.
+- Show results in list.
                      */
                     resultsList.adapter =
                         adapter
@@ -766,7 +693,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
                     )
 
                     /*
-                     * Show same results on map.
+- Show same results on map.
                      */
                     replaceMarkersWithSearchResults(
                         outcome.places
@@ -790,9 +717,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * EXIT SEARCH MODE
-     * =========================================================
+    - =========================================================
+    - EXIT SEARCH MODE
+    - =========================================================
      */
     private fun exitSearchMode(
         label: TextView,
@@ -825,9 +752,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * LOCATION PERMISSION
-     * =========================================================
+    - =========================================================
+    - LOCATION PERMISSION
+    - =========================================================
      */
     private fun requestLocation() {
 
@@ -866,30 +793,49 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * LOCATION PUCK
-     * =========================================================
+    - =========================================================
+    - LOCATION PUCK
+    - =========================================================
      */
     private fun enableLocationPuck() {
+        val map = mapLibreMap ?: return
 
-        if (!hasLocationPermission()) {
-            return
-        }
+        // The location indicator needs a loaded map style.
+        val style = map.style ?: return
 
-        mapView
-            ?.location
-            ?.updateSettings {
+        // Never activate the location component without permission.
+        if (!hasLocationPermission()) return
 
-                enabled = true
+        try {
+            val locationComponent = map.locationComponent
 
-                pulsingEnabled = true
+            if (!locationComponent.isLocationComponentActivated) {
+                locationComponent.activateLocationComponent(
+                    LocationComponentActivationOptions
+                        .builder(requireContext(), style)
+                        .build()
+                )
             }
+
+            locationComponent.isLocationComponentEnabled = true
+
+            // Show the user's position without forcing the camera to follow it.
+            locationComponent.cameraMode = CameraMode.NONE
+            locationComponent.renderMode = RenderMode.NORMAL
+
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "MapFragment",
+                "Unable to enable the location indicator",
+                e
+            )
+        }
     }
 
     /**
-     * =========================================================
-     * CACHE CURRENT LOCATION
-     * =========================================================
+    - =========================================================
+    - CACHE CURRENT LOCATION
+    - =========================================================
      */
     private fun cacheCurrentLocation() {
 
@@ -903,11 +849,12 @@ class MapFragment : Fragment(R.layout.activity_map) {
 
                 if (cached != null) {
 
-                    currentLocation =
-                        Point.fromLngLat(
-                            cached.longitude,
-                            cached.latitude
-                        )
+                    currentLocation = GeoPoint.fromLngLat(
+                        cached.longitude,
+                        cached.latitude
+                    )
+
+                    updateMapWeather(currentLocation!!)
 
                 } else {
 
@@ -919,41 +866,54 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * RECENTER
-     * =========================================================
+    - =========================================================
+    - RECENTER
+    - =========================================================
      */
     private fun recenterOnMe() {
-
         if (!hasLocationPermission()) {
-
             locationPermissionLauncher.launch(
                 arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
-
             return
         }
 
-        fusedLocationClient
-            .lastLocation
-            .addOnSuccessListener { cached ->
+        val cancellationTokenSource = CancellationTokenSource()
 
-                if (cached != null) {
-
-                    recenterOn(
-                        cached.latitude,
-                        cached.longitude
-                    )
-
-                } else {
-
-                    requestLiveLocationUpdate()
-                }
+        fusedLocationClient.getCurrentLocation(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            cancellationTokenSource.token
+        ).addOnSuccessListener { location ->
+            if (location != null) {
+                recenterOn(
+                    location.latitude,
+                    location.longitude
+                )
+            } else {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Couldn't get your location. Check that device location is enabled.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
+        }.addOnFailureListener { error ->
+            android.util.Log.e(
+                "MapFragment",
+                "Failed to get current location",
+                error
+            )
+
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Unable to get your location. Please try again.",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
     }
+
 
     private fun requestLiveLocationUpdate(
         recenter: Boolean = true
@@ -992,11 +952,12 @@ class MapFragment : Fragment(R.layout.activity_map) {
 
                         } else {
 
-                            currentLocation =
-                                Point.fromLngLat(
-                                    loc.longitude,
-                                    loc.latitude
-                                )
+                            currentLocation = GeoPoint.fromLngLat(
+                                loc.longitude,
+                                loc.latitude
+                            )
+
+                            updateMapWeather(currentLocation!!)
                         }
                     }
 
@@ -1021,7 +982,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
     ) {
 
         val point =
-            Point.fromLngLat(
+            GeoPoint.fromLngLat(
                 longitude,
                 latitude
             )
@@ -1029,21 +990,18 @@ class MapFragment : Fragment(R.layout.activity_map) {
         currentLocation =
             point
 
-        mapView
-            ?.mapboxMap
-            ?.setCamera(
+        updateMapWeather(point)
 
-                CameraOptions.Builder()
-                    .center(point)
-                    .zoom(15.5)
-                    .build()
-            )
+        mapLibreMap?.cameraPosition = CameraPosition.Builder()
+            .target(LatLng(latitude, longitude))
+            .zoom(15.5)
+            .build()
     }
 
     /**
-     * =========================================================
-     * OPEN RESTAURANT DETAILS
-     * =========================================================
+    - =========================================================
+    - OPEN RESTAURANT DETAILS
+    - =========================================================
      */
     private fun openDetail() {
 
@@ -1061,9 +1019,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * CARD VISIBILITY
-     * =========================================================
+    - =========================================================
+    - CARD VISIBILITY
+    - =========================================================
      */
     private fun updateCardVisibility() {
 
@@ -1083,9 +1041,9 @@ class MapFragment : Fragment(R.layout.activity_map) {
     }
 
     /**
-     * =========================================================
-     * BOTTOM PLACE CARD
-     * =========================================================
+    - =========================================================
+    - BOTTOM PLACE CARD
+    - =========================================================
      */
     private fun bindCard() {
 
@@ -1130,20 +1088,21 @@ class MapFragment : Fragment(R.layout.activity_map) {
                 "New"
             }
 
+        val statusPrefix = when (place.isOpen) {
+            true -> "OPEN NOW · "
+            false -> "CLOSED · "
+            null -> ""
+        }
+
         rootView
-            .findViewById<TextView>(
-                R.id.tv_map_status
-            )
-            .text =
-            "${if (place.isOpen) "OPEN NOW" else "CLOSED"} · " +
-                    "${"%.1f".format(place.distanceKm)} km away · " +
-                    place.area
+            .findViewById<TextView>(R.id.tv_map_status)
+            .text = "$statusPrefix${"%.1f".format(place.distanceKm)} km away · ${place.area}"
     }
 
     /**
-     * =========================================================
-     * FILTER CHIPS
-     * =========================================================
+    - =========================================================
+    - FILTER CHIPS
+    - =========================================================
      */
     private fun setupChips(
         view: View
@@ -1189,7 +1148,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
                 .setOnClickListener {
 
                     /*
-                     * Update selected chip.
+- Update selected chip.
                      */
                     for (
                     j in 0 until row.childCount
@@ -1226,68 +1185,7 @@ class MapFragment : Fragment(R.layout.activity_map) {
                             )
                         }
                     }
-
-                    selected = null
-
-                    updateCardVisibility()
-
-                    /*
-                     * Filters already-known places.
-                     *
-                     * No new Mapbox request.
-                     */
-                    val merged =
-                        (
-                                PlaceCache.all() +
-                                        DummyData.places
-                                )
-                            .distinctBy {
-                                it.id
-                            }
-
-                    replaceMarkersWithSearchResults(
-                        merged
-                            .filter(filters[i])
-                            .take(15)
-                    )
                 }
         }
-    }
-
-    /**
-     * =========================================================
-     * MAP LIFECYCLE
-     * =========================================================
-     */
-    override fun onStart() {
-
-        super.onStart()
-
-        mapView?.onStart()
-    }
-
-    override fun onStop() {
-
-        super.onStop()
-
-        mapView?.onStop()
-    }
-
-    override fun onDestroyView() {
-
-        super.onDestroyView()
-
-        mapView?.onDestroy()
-
-        mapView = null
-
-        annotationManager = null
-    }
-
-    override fun onLowMemory() {
-
-        super.onLowMemory()
-
-        mapView?.onLowMemory()
     }
 }

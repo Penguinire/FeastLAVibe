@@ -22,7 +22,7 @@ data class Place(
     val reviewCount: Int?,
     val distanceKm: Double,
     val area: String,
-    val isOpen: Boolean,
+    val isOpen: Boolean?,
     val type: PlaceType,
     val phone: String? = null,
     val website: String? = null,
@@ -130,7 +130,9 @@ object DummyData {
     )
 
     fun byId(id: String): Place =
-        PlaceCache.get(id) ?: places.firstOrNull { it.id == id } ?: places[0]
+        PlaceCache.get(id)
+            ?: places.firstOrNull { it.id == id }
+            ?: places.first()
 
     fun nearby() = places.filter { it.distanceKm <= 1.0 }
 
@@ -185,65 +187,18 @@ object DummyData {
 }
 
 /**
- * Converts a Mapbox PlaceAutocompleteResult into our own Place model.
- * This is the ONLY place in the app that should know about Mapbox's result
  * classes — every Fragment/Adapter downstream only ever sees Place, so we can
  * swap search providers later without touching UI code.
- *
- * Fields Mapbox doesn't return (price, generatorBackup, most tags) fall back
  * to sensible defaults rather than fake specifics — we don't invent data.
  */
-fun com.mapbox.search.autocomplete.PlaceAutocompleteResult.toPlace(): Place {
-    val category = categories?.firstOrNull() ?: "Place"
-    return Place(
-        id = id,
-        name = name,
-        cuisine = category,
-        price = null,
-        rating = averageRating,
-        reviewCount = reviewCount,
-        distanceKm = (distanceMeters ?: 0.0) / 1000.0,
-        area = address?.place ?: address?.formattedAddress ?: "Pretoria",
-        isOpen = true,
-        type = inferPlaceType(categories),
-        phone = phone,
-        website = website,
-        lat = coordinate.latitude(),
-        lng = coordinate.longitude(),
-        tags = emptyList(),
-        generatorBackup = false
-    )
-}
 
 /**
  * Partial conversion for an autocomplete suggestion.
  * This is used for live typing results. Since it's a suggestion,
  * it may not have all fields populated yet.
  */
-fun com.mapbox.search.autocomplete.PlaceAutocompleteSuggestion.toPlace(): Place {
-    val category = categories?.firstOrNull() ?: "Place"
-    return Place(
-        id = name + "_" + coordinate?.longitude() + "_" + coordinate?.latitude(),
-        name = name,
-        cuisine = category,
-        price = null,
-        rating = null,
-        reviewCount = null,
-        distanceKm = (distanceMeters ?: 0.0) / 1000.0,
-        area = formattedAddress ?: "Pretoria",
-        isOpen = true,
-        type = inferPlaceType(categories),
-        phone = null,
-        website = null,
-        lat = coordinate?.latitude() ?: 0.0,
-        lng = coordinate?.longitude() ?: 0.0,
-        tags = emptyList(),
-        generatorBackup = false
-    )
-}
 
 /**
- * Guesses a PlaceType from Mapbox's category strings (e.g. "night_club", "bar",
  * "fast_food"). Falls back to RESTAURANT only when nothing more specific matches —
  * this replaces the old hardcoded `type = PlaceType.RESTAURANT` that made every
  * real search result look like a restaurant regardless of what it actually was.
@@ -258,35 +213,6 @@ private fun inferPlaceType(categories: List<String>?): PlaceType {
     }
 }
 
-/**
- * Converts a Mapbox Discover (category search) result into our Place model.
- * Same reasoning as toPlace() above — this is the only place that should know
- * about DiscoverResult's shape.
- */
-fun com.mapbox.search.discover.DiscoverResult.toPlace(
-    inferredType: PlaceType,
-    originLat: Double,
-    originLng: Double
-): Place {
-    return Place(
-        id = id,
-        name = name,
-        cuisine = categories.firstOrNull() ?: "Place",
-        price = null,
-        rating = null,
-        reviewCount = null,
-        distanceKm = distanceBetweenKm(originLat, originLng, coordinate.latitude(), coordinate.longitude()),
-        area = address.place ?: address.formattedAddress ?: "Pretoria",
-        isOpen = true,
-        type = inferredType,
-        phone = null,
-        website = null,
-        lat = coordinate.latitude(),
-        lng = coordinate.longitude(),
-        tags = emptyList(),
-        generatorBackup = false
-    )
-}
 
 /** Straight-line distance in km between two coordinates (Haversine formula). */
 fun distanceBetweenKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {

@@ -16,15 +16,16 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.flexbox.FlexboxLayout
-import com.mapbox.geojson.Point
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class SearchFragment : Fragment(R.layout.activity_search) {
 
-    private val pretoriaCbd =
-        Point.fromLngLat(28.1881, -25.7461)
+    private var currentArea: UserArea? = null
+
+    private var lastSearchPlaces: List<Place> = emptyList()
+    private var searchResultsAdapter: SearchResultAdapter? = null
 
     override fun onViewCreated(
         view: View,
@@ -59,9 +60,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             view.findViewById<LinearLayout>(R.id.suggested_list)
 
         /*
-         * ---------------------------------------------------------
-         * BACK
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- BACK
+
+
+- ---------------------------------------------------------
+
+
          */
 
         view.findViewById<View>(R.id.iv_back)
@@ -70,10 +77,21 @@ class SearchFragment : Fragment(R.layout.activity_search) {
                 findNavController().navigateUp()
             }
 
+        view.findViewById<View>(R.id.btn_search_filters)
+            .setOnClickListener {
+                findNavController().navigate(R.id.filtersFragment)
+            }
+
         /*
-         * ---------------------------------------------------------
-         * CLEAR
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- CLEAR
+
+
+- ---------------------------------------------------------
+
+
          */
 
         view.findViewById<View>(R.id.iv_clear)
@@ -90,9 +108,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             }
 
         /*
-         * ---------------------------------------------------------
-         * RESULT ADAPTER
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- RESULT ADAPTER
+
+
+- ---------------------------------------------------------
+
+
          */
 
         val openDetail: (Place) -> Unit = { place ->
@@ -113,6 +137,8 @@ class SearchFragment : Fragment(R.layout.activity_search) {
                 openDetail
             )
 
+        searchResultsAdapter = resultsAdapter
+
         results.layoutManager =
             LinearLayoutManager(requireContext())
 
@@ -120,9 +146,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             resultsAdapter
 
         /*
-         * ---------------------------------------------------------
-         * AUTOCOMPLETE SUGGESTIONS
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- AUTOCOMPLETE SUGGESTIONS
+
+
+- ---------------------------------------------------------
+
+
          */
 
         var autocompleteJob: Job? = null
@@ -148,9 +180,14 @@ class SearchFragment : Fragment(R.layout.activity_search) {
 
                     val outcome =
                         try {
+                            val area = currentArea
+                                ?: DeviceLocation.getUserArea(requireContext()).also {
+                                    currentArea = it
+                                }
+
                             PlaceSearch.suggest(
                                 query = query,
-                                origin = pretoriaCbd,
+                                origin = area.point,
                                 limit = 5
                             )
                         } catch (e: Exception) {
@@ -169,6 +206,7 @@ class SearchFragment : Fragment(R.layout.activity_search) {
 
                     val places =
                         outcome?.places.orEmpty()
+                            .filter { FilterState.matches(it) }
 
                     if (places.isEmpty()) {
                         return@launch
@@ -214,9 +252,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
         }
 
         /*
-         * ---------------------------------------------------------
-         * TEXT CHANGED
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- TEXT CHANGED
+
+
+- ---------------------------------------------------------
+
+
          */
 
         input.addTextChangedListener { text ->
@@ -239,8 +283,12 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             } else {
 
                 /*
-                 * Hide the old static browse content while
-                 * the user is actively searching.
+- Hide the old static browse content while
+
+
+- the user is actively searching.
+
+
                  */
                 recentSection.visibility =
                     View.GONE
@@ -262,9 +310,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
         }
 
         /*
-         * ---------------------------------------------------------
-         * KEYBOARD SEARCH BUTTON
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- KEYBOARD SEARCH BUTTON
+
+
+- ---------------------------------------------------------
+
+
          */
 
         input.setOnEditorActionListener { _, actionId, event ->
@@ -306,9 +360,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
         }
 
         /*
-         * ---------------------------------------------------------
-         * RECENT SEARCHES
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- RECENT SEARCHES
+
+
+- ---------------------------------------------------------
+
+
          */
 
         val chipRow =
@@ -370,9 +430,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             }
 
         /*
-         * ---------------------------------------------------------
-         * STATIC SUGGESTED ITEMS
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- STATIC SUGGESTED ITEMS
+
+
+- ---------------------------------------------------------
+
+
          */
 
         DummyData.suggestions.forEach { label ->
@@ -402,9 +468,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
         }
 
         /*
-         * ---------------------------------------------------------
-         * QUICK SUGGESTIONS
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- QUICK SUGGESTIONS
+
+
+- ---------------------------------------------------------
+
+
          */
 
         val quickWrap =
@@ -468,9 +540,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             }
 
         /*
-         * ---------------------------------------------------------
-         * CLEAR RECENT
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- CLEAR RECENT
+
+
+- ---------------------------------------------------------
+
+
          */
 
         view.findViewById<View>(
@@ -481,9 +559,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
         }
 
         /*
-         * ---------------------------------------------------------
-         * OTHER BUTTONS
-         * ---------------------------------------------------------
+- ---------------------------------------------------------
+
+
+- OTHER BUTTONS
+
+
+- ---------------------------------------------------------
+
+
          */
 
         view.findViewById<View>(
@@ -502,9 +586,15 @@ class SearchFragment : Fragment(R.layout.activity_search) {
     }
 
     /*
-     * -------------------------------------------------------------
-     * FINAL SEARCH
-     * -------------------------------------------------------------
+- -------------------------------------------------------------
+
+
+- FINAL SEARCH
+
+
+- -------------------------------------------------------------
+
+
      */
 
     private fun performFinalSearch(
@@ -538,9 +628,14 @@ class SearchFragment : Fragment(R.layout.activity_search) {
 
             val outcome = try {
 
+                val area = currentArea
+                    ?: DeviceLocation.getUserArea(requireContext()).also {
+                        currentArea = it
+                    }
+
                 PlaceSearch.search(
                     query = query,
-                    origin = pretoriaCbd,
+                    origin = area.point,
                     limit = 8
                 )
 
@@ -561,7 +656,7 @@ class SearchFragment : Fragment(R.layout.activity_search) {
                     View.VISIBLE
 
                 noResultsMessage.text =
-                    "Unable to load places. Check your internet connection and Mapbox access."
+                    "Unable to load places. Check your internet connection and try again."
 
                 return@launch
             }
@@ -569,6 +664,8 @@ class SearchFragment : Fragment(R.layout.activity_search) {
             PlaceCache.putAll(
                 outcome.places
             )
+
+            lastSearchPlaces = outcome.places
 
             if (outcome.places.isEmpty()) {
 
@@ -581,18 +678,75 @@ class SearchFragment : Fragment(R.layout.activity_search) {
                 return@launch
             }
 
-            resultsHeader.visibility =
-                View.VISIBLE
+            val filteredPlaces = outcome.places.filter {
+                FilterState.matches(it)
+            }
 
-            results.visibility =
-                View.VISIBLE
+            if (filteredPlaces.isEmpty()) {
+                resultsHeader.visibility = View.GONE
+                results.visibility = View.GONE
+
+                noResults.visibility = View.VISIBLE
+
+                noResultsMessage.text =
+                    "No places match your current filters. Try changing or clearing them."
+
+                return@launch
+            }
+
+            noResults.visibility = View.GONE
+            resultsHeader.visibility = View.VISIBLE
+            results.visibility = View.VISIBLE
 
             resultsCount.text =
-                "${outcome.places.size} Hotspots Found ●"
+                "${filteredPlaces.size} Hotspots Found ●"
 
-            adapter.submit(
-                outcome.places
-            )
+            adapter.submit(filteredPlaces)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (lastSearchPlaces.isEmpty()) return
+
+        val filteredPlaces = lastSearchPlaces.filter {
+            FilterState.matches(it)
+        }
+
+        val root = view ?: return
+
+        val resultsHeader =
+            root.findViewById<View>(R.id.results_header)
+
+        val results =
+            root.findViewById<RecyclerView>(R.id.rv_results)
+
+        val noResults =
+            root.findViewById<View>(R.id.no_results_section)
+
+        val noResultsMessage =
+            root.findViewById<TextView>(R.id.tv_no_results_message)
+
+        val resultsCount =
+            root.findViewById<TextView>(R.id.tv_results_count)
+
+        if (filteredPlaces.isEmpty()) {
+            resultsHeader.visibility = View.GONE
+            results.visibility = View.GONE
+            noResults.visibility = View.VISIBLE
+
+            noResultsMessage.text =
+                "No places match your current filters. Try changing or clearing them."
+        } else {
+            noResults.visibility = View.GONE
+            resultsHeader.visibility = View.VISIBLE
+            results.visibility = View.VISIBLE
+
+            resultsCount.text =
+                "${filteredPlaces.size} Hotspots Found ●"
+
+            searchResultsAdapter?.submit(filteredPlaces)
         }
     }
 

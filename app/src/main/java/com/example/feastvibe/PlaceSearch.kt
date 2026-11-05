@@ -1,82 +1,33 @@
+
 package com.example.feastvibe
 
 import android.content.Context
 import android.util.Log
-import com.mapbox.geojson.Point
-import com.mapbox.search.discover.Discover
-import com.mapbox.search.discover.DiscoverQuery
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Locale
+import kotlin.coroutines.resume
 
 /**
  * Shared search logic for Feast & Vibe.
  *
- * Search is intentionally based around Mapbox Discover because
- * our app is being used in South Africa.
- *
- * Supported examples:
- *
- * restaurants
- * coffee
- * cafes
- * bars
- * clubs
- * pizza
- * burgers
- * sushi
- * fast food
- * Hatfield
- * Menlyn
- * Pretoria CBD
+ * Geoapify provides live place search.
+ * Firestore provides additional verified curated venues.
+ * Both are converted into the existing Place model.
  */
 object PlaceSearch {
 
     private const val TAG = "PlaceSearch"
 
-    private val discover by lazy {
-        Discover.create()
-    }
-
-    /*
-     * Pretoria areas that we know directly.
-     *
-     * This avoids making unnecessary area-search API calls.
-     */
     private val knownAreas = mapOf(
-
-        "hatfield" to Point.fromLngLat(
-            28.2378,
-            -25.7487
-        ),
-
-        "menlyn" to Point.fromLngLat(
-            28.2775,
-            -25.7826
-        ),
-
-        "menlyn maine" to Point.fromLngLat(
-            28.2775,
-            -25.7826
-        ),
-
-        "pretoria cbd" to Point.fromLngLat(
-            28.1881,
-            -25.7461
-        ),
-
-        "cbd" to Point.fromLngLat(
-            28.1881,
-            -25.7461
-        )
+        "hatfield" to GeoPoint.fromLngLat(28.2378, -25.7487),
+        "menlyn" to GeoPoint.fromLngLat(28.2775, -25.7826),
+        "menlyn maine" to GeoPoint.fromLngLat(28.2775, -25.7826),
+        "pretoria cbd" to GeoPoint.fromLngLat(28.1881, -25.7461),
+        "cbd" to GeoPoint.fromLngLat(28.1881, -25.7461)
     )
 
-    // Used only when Mapbox has no results near the actual search location —
-    // guarantees the demo shows a real, live API result rather than only samples.
-    private val GLOBAL_FALLBACK_ORIGIN = Point.fromLngLat(-0.1276, 51.5072) // London
     fun initialize(context: Context) {
-        /*
-         * Kept for compatibility with MainActivity.
-         *
-         * Discover obtains its Mapbox configuration internally.
-         */
+        // Geoapify is configured through BuildConfig.GEOAPIFY_API_KEY.
     }
 
     data class Outcome(
@@ -84,590 +35,344 @@ object PlaceSearch {
         val resolvedAreaName: String?
     )
 
-    /**
-     * ---------------------------------------------------------
-     * CATEGORY MATCHING
-     * ---------------------------------------------------------
-     *
-     * Converts normal user words into Mapbox categories.
-     */
-    private fun categoryForQuery(
-        query: String
-    ): DiscoverQuery.Category? {
-
-        val q =
-            query
-                .trim()
-                .lowercase()
-
-        return when {
-
-            q in listOf(
-                "restaurant",
-                "restaurants",
-                "food",
-                "eat",
-                "eating",
-                "dinner",
-                "lunch"
-            ) ->
-                DiscoverQuery.Category.RESTAURANTS
-
-            q in listOf(
-                "coffee",
-                "cafe",
-                "cafes",
-                "café",
-                "coffee shop",
-                "coffee shops"
-            ) ->
-                DiscoverQuery.Category.COFFEE_SHOP_CAFE
-
-            q in listOf(
-                "bar",
-                "bars",
-                "pub",
-                "pubs",
-                "cocktail",
-                "cocktails",
-                "drinks"
-            ) ->
-                DiscoverQuery.Category.BARS
-
-            q in listOf(
-                "club",
-                "clubs",
-                "nightclub",
-                "nightclubs",
-                "party",
-                "nightlife"
-            ) ->
-                DiscoverQuery.Category.NIGHT_CLUBS
-
-            else ->
-                null
-        }
+    private suspend fun searchGeoapify(
+        query: String,
+        origin: GeoPoint,
+        limit: Int
+    ): List<Place> {
+        return GeoapifyPlaceSearch.search(
+            query = query,
+            origin = origin,
+            apiKey = BuildConfig.GEOAPIFY_API_KEY,
+            limit = limit
+        )
     }
 
     /**
-     * ---------------------------------------------------------
-     * FOOD SEARCH
-     * ---------------------------------------------------------
+     * Converts the existing callback-based Firestore repository
+     * into a suspend function so it works with PlaceSearch.
      *
-     * Discover does not need an exact restaurant-name query
-     * for this fallback approach.
-     *
-     * Instead, common food searches are mapped to restaurants
-     * and the returned places are filtered by their category/
-     * name where possible.
+     * If Firestore fails, return an empty list and allow
+     * Geoapify results to remain available.
      */
-    private fun looksLikeFoodQuery(
-        query: String
-    ): Boolean {
+    private suspend fun fetchCuratedVenues(
+        origin: GeoPoint
+    ): List<Place> = suspendCancellableCoroutine { continuation ->
 
-        val q =
-            query
-                .trim()
-                .lowercase()
+        CuratedVenueRepository.fetchVerifiedVenues(
+            originLat = origin.latitude,
+            originLng = origin.longitude,
 
-        val foodWords =
-            listOf(
-                "pizza",
-                "burger",
-                "burgers",
-                "sushi",
-                "steak",
-                "chicken",
-                "wings",
-                "tacos",
-                "taco",
-                "pasta",
-                "seafood",
-                "breakfast",
-                "brunch",
-                "fast food",
-                "fried chicken",
-                "sandwich",
-                "sandwiches"
-            )
+            onSuccess = { venues ->
+                if (continuation.isActive) {
+                    continuation.resume(venues)
+                }
+            },
 
-        return foodWords.any {
-            q.contains(it)
+            onError = { exception ->
+                Log.e(TAG, "Could not load curated venues", exception)
+
+                if (continuation.isActive) {
+                    continuation.resume(emptyList())
+                }
+            }
+        )
+    }
+
+    private fun categoryForQuery(query: String): String? {
+        return when (query.trim().lowercase(Locale.ROOT)) {
+            "restaurant", "restaurants", "food", "eat",
+            "eating", "dinner", "lunch" -> "restaurants"
+
+            "coffee", "cafe", "cafes", "café",
+            "coffee shop", "coffee shops" -> "cafes"
+
+            "bar", "bars", "pub", "pubs",
+            "cocktail", "cocktails", "drinks" -> "bars"
+
+            "club", "clubs", "nightclub", "nightclubs",
+            "party", "nightlife" -> "clubs"
+
+            "fast food", "fastfood" -> "fast food"
+
+            else -> null
         }
     }
 
+    private fun looksLikeFoodQuery(query: String): Boolean {
+        val q = query.trim().lowercase(Locale.ROOT)
+
+        val foodWords = listOf(
+            "pizza", "burger", "burgers", "sushi", "steak",
+            "chicken", "wings", "tacos", "taco", "pasta",
+            "seafood", "breakfast", "brunch", "fast food",
+            "fried chicken", "sandwich", "sandwiches"
+        )
+
+        return foodWords.any { q.contains(it) }
+    }
+
     /**
-     * ---------------------------------------------------------
-     * LIVE SUGGESTIONS
-     * ---------------------------------------------------------
+     * Filters curated venues according to the search query.
      */
+    private fun filterCuratedVenues(
+        venues: List<Place>,
+        query: String,
+        category: String?
+    ): List<Place> {
+
+        val cleanQuery = query.trim().lowercase(Locale.ROOT)
+
+        if (cleanQuery.isBlank()) return emptyList()
+
+        // Category searches use the existing PlaceType model.
+        if (category != null) {
+            return when (category) {
+                "restaurants" -> venues.filter {
+                    it.type == PlaceType.RESTAURANT
+                }
+
+                "cafes" -> venues.filter {
+                    it.type == PlaceType.RESTAURANT
+                }
+
+                "bars" -> venues.filter {
+                    it.type == PlaceType.BAR
+                }
+
+                "clubs" -> venues.filter {
+                    it.type == PlaceType.CLUB
+                }
+
+                "fast food" -> venues.filter {
+                    it.type == PlaceType.FAST_FOOD
+                }
+
+                else -> emptyList()
+            }
+        }
+
+        // Match names, cuisine, address/area and tags.
+        val words = cleanQuery
+            .split(" ", ",", "-")
+            .filter { it.length >= 2 }
+
+        return venues.filter { place ->
+
+            val searchableText = (
+                    "${place.name} " +
+                            "${place.cuisine} " +
+                            "${place.area} " +
+                            place.tags.joinToString(" ")
+                    ).lowercase(Locale.ROOT)
+
+            words.any { word ->
+                searchableText.contains(word)
+            }
+        }
+    }
+
     suspend fun suggest(
         query: String,
-        origin: Point,
+        origin: GeoPoint,
         limit: Int = 5
     ): Outcome {
-
-        val cleanQuery =
-            query.trim()
-
-        if (cleanQuery.isBlank()) {
-
-            return Outcome(
-                emptyList(),
-                null
-            )
-        }
-
-        /*
-         * 1. Known area
-         */
-        val areaPoint =
-            findKnownArea(cleanQuery)
-
-        if (areaPoint != null) {
-
-            Log.d(
-                TAG,
-                "Suggestion area: $cleanQuery"
-            )
-
-            val places =
-                establishmentsAround(
-                    origin = areaPoint,
-                    limit = limit
-                )
-
-            PlaceCache.putAll(places)
-
-            return Outcome(
-                places,
-                cleanQuery
-            )
-        }
-
-        /*
-         * 2. Exact broad category
-         */
-        val category =
-            categoryForQuery(cleanQuery)
-
-        if (category != null) {
-
-            Log.d(
-                TAG,
-                "Suggestion category: $cleanQuery"
-            )
-
-            val places =
-                discoverCategory(
-                    category = category,
-                    origin = origin,
-                    limit = limit
-                )
-
-            PlaceCache.putAll(places)
-
-            return Outcome(
-                places,
-                null
-            )
-        }
-
-        /*
-         * 3. Food search
-         *
-         * Example:
-         *
-         * pizza
-         * burgers
-         * sushi
-         *
-         * We search nearby restaurants rather than calling
-         * Search Box /forward.
-         */
-        if (looksLikeFoodQuery(cleanQuery)) {
-
-            Log.d(
-                TAG,
-                "Food suggestion: $cleanQuery"
-            )
-
-            val places =
-                discoverCategory(
-                    category =
-                        DiscoverQuery.Category.RESTAURANTS,
-                    origin = origin,
-                    limit = limit
-                )
-
-            PlaceCache.putAll(places)
-
-            return Outcome(
-                filterFoodResults(
-                    places,
-                    cleanQuery
-                ).ifEmpty {
-                    places
-                }.take(limit),
-                null
-            )
-        }
-
-        /*
-         * 4. Generic fallback
-         *
-         * If we don't understand the text, show nearby
-         * restaurants rather than returning nothing.
-         */
-        Log.d(
-            TAG,
-            "Generic suggestion fallback: $cleanQuery"
-        )
-
-        val places =
-            discoverCategory(
-                category =
-                    DiscoverQuery.Category.RESTAURANTS,
-                origin = origin,
-                limit = limit
-            )
-
-        PlaceCache.putAll(places)
-
-        return Outcome(
-            places,
-            null
+        return runSearch(
+            query = query,
+            origin = origin,
+            limit = limit,
+            isSuggestion = true
         )
     }
 
-    /**
-     * ---------------------------------------------------------
-     * FINAL SEARCH
-     * ---------------------------------------------------------
-     */
     suspend fun search(
         query: String,
-        origin: Point,
+        origin: GeoPoint,
         limit: Int = 8
     ): Outcome {
+        return runSearch(
+            query = query,
+            origin = origin,
+            limit = limit,
+            isSuggestion = false
+        )
+    }
 
-        val cleanQuery =
-            query.trim()
+    private suspend fun runSearch(
+        query: String,
+        origin: GeoPoint,
+        limit: Int,
+        isSuggestion: Boolean
+    ): Outcome {
+
+        val cleanQuery = query.trim()
 
         if (cleanQuery.isBlank()) {
-
-            return Outcome(
-                emptyList(),
-                null
-            )
+            return Outcome(emptyList(), null)
         }
 
-        /*
-         * 1. Known area
-         */
-        val areaPoint =
-            findKnownArea(cleanQuery)
+        val safeLimit = limit.coerceIn(1, 50)
+        val normalized = cleanQuery.lowercase(Locale.ROOT)
+
+        // Check whether the query is a known area.
+        val areaPoint = knownAreas[normalized]
 
         if (areaPoint != null) {
+            Log.d(TAG, "Searching known area: $cleanQuery")
 
-            Log.d(
-                TAG,
-                "Final area search: $cleanQuery"
+            val geoapifyPlaces = establishmentsAround(
+                origin = areaPoint,
+                limit = safeLimit
             )
 
-            val places =
-                establishmentsAround(
-                    origin = areaPoint,
-                    limit = limit
-                )
+            val curatedPlaces = fetchCuratedVenues(areaPoint)
+                .filterCuratedForArea(cleanQuery)
 
-            PlaceCache.putAll(places)
+            val combinedPlaces = (
+                    geoapifyPlaces + curatedPlaces
+                    )
+                .distinctBy { it.id }
+                .sortedBy { it.distanceKm }
+                .take(safeLimit)
+
+            PlaceCache.putAll(combinedPlaces)
 
             return Outcome(
-                places,
-                cleanQuery
+                places = combinedPlaces,
+                resolvedAreaName = cleanQuery
             )
         }
 
-        /*
-         * 2. Broad category
-         */
-        val category =
-            categoryForQuery(cleanQuery)
+        val category = categoryForQuery(cleanQuery)
 
-        if (category != null) {
+        // Search Geoapify using the existing search rules.
+        val geoapifyPlaces = when {
+            category != null -> {
+                Log.d(TAG, "Searching category: $category")
+                searchGeoapify(category, origin, safeLimit)
+            }
 
-            Log.d(
-                TAG,
-                "Final category search: $cleanQuery"
-            )
+            looksLikeFoodQuery(cleanQuery) -> {
+                Log.d(TAG, "Searching food query: $cleanQuery")
 
-            val places =
-                discoverCategory(
-                    category = category,
-                    origin = origin,
-                    limit = limit
+                val results = searchGeoapify(
+                    cleanQuery,
+                    origin,
+                    safeLimit
                 )
 
-            PlaceCache.putAll(places)
+                val filtered = filterFoodResults(results, cleanQuery)
 
-            return Outcome(
-                places,
-                null
-            )
+                if (filtered.isNotEmpty()) filtered else results
+            }
+
+            else -> {
+                Log.d(TAG, "Searching general query: $cleanQuery")
+                searchGeoapify(cleanQuery, origin, safeLimit)
+            }
         }
 
-        /*
-         * 3. Food search
-         */
-        if (looksLikeFoodQuery(cleanQuery)) {
+        // Fetch and filter verified Firestore venues.
+        val allCuratedPlaces = fetchCuratedVenues(origin)
 
-            Log.d(
-                TAG,
-                "Final food search: $cleanQuery"
-            )
-
-            val places =
-                discoverCategory(
-                    category =
-                        DiscoverQuery.Category.RESTAURANTS,
-                    origin = origin,
-                    limit = limit
-                )
-
-            val filtered =
-                filterFoodResults(
-                    places,
-                    cleanQuery
-                )
-
-            val finalPlaces =
-                if (filtered.isNotEmpty()) {
-                    filtered
-                } else {
-                    places
-                }.take(limit)
-
-            PlaceCache.putAll(finalPlaces)
-
-            return Outcome(
-                finalPlaces,
-                null
-            )
-        }
-
-        /*
-         * 4. Generic restaurant fallback.
-         *
-         * This means a query such as "KFC" will still produce
-         * nearby food places instead of a completely empty app.
-         *
-         * It is not an exact brand lookup.
-         */
         Log.d(
             TAG,
-            "Generic POI fallback: $cleanQuery"
+            "Firestore venues loaded: ${allCuratedPlaces.map { it.name }}"
         )
 
-        val places =
-            discoverCategory(
-                category =
-                    DiscoverQuery.Category.RESTAURANTS,
-                origin = origin,
-                limit = limit
-            )
+        val curatedPlaces = filterCuratedVenues(
+            venues = allCuratedPlaces,
+            query = cleanQuery,
+            category = category
+        )
 
-        PlaceCache.putAll(places)
+        Log.d(
+            TAG,
+            "Curated matches for '$cleanQuery': ${curatedPlaces.map { it.name }}"
+        )
+
+        // Combine both sources without duplicate IDs.
+        val combinedBeforeLimit = (
+                geoapifyPlaces + curatedPlaces
+                )
+            .distinctBy { it.id }
+            .sortedBy { it.distanceKm }
+
+        Log.d(
+            TAG,
+            "Combined results before limit: ${combinedBeforeLimit.map { it.name }}"
+        )
+
+        val combinedPlaces = combinedBeforeLimit.take(safeLimit)
+
+        Log.d(
+            TAG,
+            "Final results after limit: ${combinedPlaces.map { it.name }}"
+        )
+
+        // Keep real results available to the detail screens.
+        PlaceCache.putAll(combinedPlaces)
 
         return Outcome(
-            places,
-            null
+            places = combinedPlaces,
+            resolvedAreaName = null
         )
     }
 
     /**
-     * ---------------------------------------------------------
-     * FILTER FOOD RESULTS
-     * ---------------------------------------------------------
-     *
-     * We can improve relevance when the returned Place contains
-     * the searched food word in its name or cuisine.
+     * Filters curated venues to match a known area search.
      */
+    private fun List<Place>.filterCuratedForArea(
+        areaName: String
+    ): List<Place> {
+
+        val query = areaName.lowercase(Locale.ROOT)
+
+        return filter { place ->
+            place.area.lowercase(Locale.ROOT).contains(query) ||
+                    query.contains(place.area.lowercase(Locale.ROOT))
+        }
+    }
+
+    private suspend fun establishmentsAround(
+        origin: GeoPoint,
+        limit: Int
+    ): List<Place> {
+
+        val restaurants = searchGeoapify("restaurants", origin, limit)
+        val bars = searchGeoapify("bars", origin, limit)
+        val clubs = searchGeoapify("clubs", origin, limit)
+        val fastFood = searchGeoapify("fast food", origin, limit)
+
+        return (
+                restaurants + bars + clubs + fastFood
+                )
+            .distinctBy { it.id }
+            .sortedBy { it.distanceKm }
+            .take(limit)
+    }
+
     private fun filterFoodResults(
         places: List<Place>,
         query: String
     ): List<Place> {
 
-        val words =
-            query
-                .lowercase()
-                .split(
-                    " ",
-                    ",",
-                    "-"
-                )
-                .filter {
-                    it.length >= 3
-                }
+        val words = query
+            .lowercase(Locale.ROOT)
+            .split(" ", ",", "-")
+            .filter { it.length >= 3 }
+
+        if (words.isEmpty()) return places
 
         return places.filter { place ->
 
             val searchableText =
-                (
-                        place.name +
-                                " " +
-                                place.cuisine
-                        )
-                    .lowercase()
+                "${place.name} ${place.cuisine} ${place.tags.joinToString(" ")}"
+                    .lowercase(Locale.ROOT)
 
-            words.any {
-                searchableText.contains(it)
+            words.any { word ->
+                searchableText.contains(word)
             }
         }
-    }
-
-    /**
-     * ---------------------------------------------------------
-     * KNOWN AREA
-     * ---------------------------------------------------------
-     */
-    private fun findKnownArea(
-        query: String
-    ): Point? {
-
-        val normalized =
-            query
-                .trim()
-                .lowercase()
-
-        return knownAreas[normalized]
-    }
-
-    /**
-     * ---------------------------------------------------------
-     * ESTABLISHMENTS AROUND AREA
-     * ---------------------------------------------------------
-     */
-    private suspend fun establishmentsAround(
-        origin: Point,
-        limit: Int
-    ): List<Place> {
-
-        val restaurants =
-            discoverCategory(
-                category =
-                    DiscoverQuery.Category.RESTAURANTS,
-                origin = origin,
-                limit = limit
-            )
-
-        val bars =
-            discoverCategory(
-                category =
-                    DiscoverQuery.Category.BARS,
-                origin = origin,
-                limit = limit
-            )
-
-        val clubs =
-            discoverCategory(
-                category =
-                    DiscoverQuery.Category.NIGHT_CLUBS,
-                origin = origin,
-                limit = limit
-            )
-
-        return (
-                restaurants +
-                        bars +
-                        clubs
-                )
-            .distinctBy {
-                it.id
-            }
-            .sortedBy {
-                it.distanceKm
-            }
-            .take(limit)
-    }
-
-    /**
-     * ---------------------------------------------------------
-     * DISCOVER CATEGORY
-     * ---------------------------------------------------------
-     */
-    private suspend fun discoverCategory(
-        category: DiscoverQuery.Category,
-        origin: Point,
-        limit: Int
-    ): List<Place> {
-
-        Log.d(TAG, "Discover origin: lat=${origin.latitude()}, lng=${origin.longitude()}")
-
-        val type = when (category) {
-            DiscoverQuery.Category.BARS -> PlaceType.BAR
-            DiscoverQuery.Category.NIGHT_CLUBS -> PlaceType.CLUB
-            else -> PlaceType.RESTAURANT
-        }
-
-        val places = try {
-            val response = discover.search(query = category, proximity = origin)
-
-            response.value.orEmpty()
-                .mapNotNull { result ->
-                    try {
-                        result.toPlace(type, origin.latitude(), origin.longitude())
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Could not convert Discover result", e)
-                        null
-                    }
-                }
-                .distinctBy { it.id }
-                .sortedBy { it.distanceKm }
-                .take(limit)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Discover failed for $category", e)
-            emptyList()
-        }
-
-        Log.d(TAG, "Discover $category returned ${places.size} places")
-
-        if (places.isNotEmpty()) return places
-
-        // No coverage near the requested location — retry against a location
-        // Mapbox has strong Discover coverage for, so the demo still shows a
-        // genuine live API result rather than only ever falling back to sample data.
-        if (origin != GLOBAL_FALLBACK_ORIGIN) {
-            Log.d(TAG, "No local coverage — retrying $category near London")
-            val fallbackPlaces = try {
-                discover.search(query = category, proximity = GLOBAL_FALLBACK_ORIGIN)
-                    .value.orEmpty()
-                    .mapNotNull { result ->
-                        try {
-                            result.toPlace(type, GLOBAL_FALLBACK_ORIGIN.latitude(), GLOBAL_FALLBACK_ORIGIN.longitude())
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
-                    .distinctBy { it.id }
-                    .take(limit)
-            } catch (e: Exception) {
-                Log.e(TAG, "Global fallback Discover call failed", e)
-                emptyList()
-            }
-
-            if (fallbackPlaces.isNotEmpty()) {
-                Log.d(TAG, "Global fallback returned ${fallbackPlaces.size} real places")
-                return fallbackPlaces
-            }
-        }
-
-        // Even the global fallback failed (e.g. no internet at all) — last resort.
-        Log.d(TAG, "Falling back to DummyData for $category")
-        return DummyData.places
-            .filter { it.type == type }
-            .sortedBy { it.distanceKm }
-            .take(limit)
     }
 }

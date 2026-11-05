@@ -12,6 +12,8 @@ import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
+import android.widget.PopupMenu
+import com.google.firebase.auth.FirebaseAuth
 import com.bumptech.glide.Glide
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -22,60 +24,108 @@ import java.util.Locale
 /** Adapted from Bear's Ticketmaster integration, wired into the Events layout. */
 class EventsFragment : Fragment(R.layout.activity_events) {
 
-    private enum class DateRange { WEEKEND, WEEK, MONTH }
+    private enum class DateRange { ALL, WEEKEND, WEEK, MONTH }
 
     private var allEvents: List<Event> = emptyList()
-    private var currentRange: DateRange = DateRange.WEEKEND
+    private var currentRange: DateRange = DateRange.ALL
     private lateinit var rootView: View
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         rootView = view
 
         view.findViewById<View>(R.id.iv_events_profile).setOnClickListener {
-            findNavController().navigate(R.id.profileFragment)
+            val auth = FirebaseAuth.getInstance()
+
+            if (auth.currentUser != null) {
+                val popup = PopupMenu(
+                    requireContext(),
+                    view.findViewById(R.id.iv_events_profile)
+                )
+
+                popup.menu.add("Sign Out")
+
+                popup.setOnMenuItemClickListener { item ->
+                    if (item.title == "Sign Out") {
+                        auth.signOut()
+                        true
+                    } else {
+                        false
+                    }
+                }
+
+                popup.show()
+            } else {
+                findNavController().navigate(R.id.signupFragment)
+            }
         }
 
         setupChips(view)
         setupSearch(view)
 
-        view.findViewById<View>(R.id.btn_submit_event).setOnClickListener {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://business.ticketmaster.com/")))
-        }
 
-        lifecycleScope.launch {
-            val result = EventRepository.getEvents(city = "Pretoria")
+        viewLifecycleOwner.lifecycleScope.launch {
+            val currentArea = DeviceLocation.getUserArea(requireContext())
+
+            view.findViewById<TextView>(R.id.tv_events_location).text =
+                "📍 WHAT'S HAPPENING IN ${currentArea.city.uppercase(Locale.getDefault())}"
+
+            val result = EventRepository.getEvents(city = currentArea.city)
+
             result.onSuccess { events ->
                 allEvents = events
                 EventCache.putAll(events)
+
                 if (events.isEmpty()) {
-                    view.findViewById<View>(R.id.tv_events_empty).visibility = View.VISIBLE
+                    view.findViewById<View>(R.id.tv_events_empty).visibility =
+                        View.VISIBLE
                 } else {
+                    view.findViewById<View>(R.id.tv_events_empty).visibility =
+                        View.GONE
+
                     bindFeatured(view, events.first())
                     renderList()
                 }
             }.onFailure {
-                view.findViewById<View>(R.id.tv_events_empty).visibility = View.VISIBLE
+                view.findViewById<View>(R.id.tv_events_empty).visibility =
+                    View.VISIBLE
             }
         }
     }
 
     private fun setupChips(view: View) {
         val row = view.findViewById<LinearLayout>(R.id.events_chip_row)
-        val ranges = listOf(DateRange.WEEKEND, DateRange.WEEK, DateRange.MONTH)
+
+        val ranges = listOf(
+            DateRange.ALL,
+            DateRange.WEEKEND,
+            DateRange.WEEK,
+            DateRange.MONTH
+        )
+
         for (i in 0 until row.childCount) {
             row.getChildAt(i).setOnClickListener {
                 for (j in 0 until row.childCount) {
                     val chip = row.getChildAt(j) as TextView
+
                     if (j == i) {
                         chip.setBackgroundResource(R.drawable.bg_chip_selected)
-                        chip.setTextColor(resources.getColor(R.color.white, null))
+                        chip.setTextColor(
+                            resources.getColor(R.color.white, null)
+                        )
                     } else {
                         chip.setBackgroundResource(R.drawable.bg_chip_unselected)
-                        chip.setTextColor(resources.getColor(R.color.text_primary, null))
+                        chip.setTextColor(
+                            resources.getColor(R.color.text_primary, null)
+                        )
                     }
                 }
+
                 currentRange = ranges[i]
-                view.findViewById<android.widget.EditText>(R.id.et_events_search).setText("")
+
+                view.findViewById<android.widget.EditText>(
+                    R.id.et_events_search
+                ).setText("")
+
                 renderList()
             }
         }
@@ -94,11 +144,36 @@ class EventsFragment : Fragment(R.layout.activity_events) {
     }
 
     /** Filters allEvents by the selected date range. Falls back to showing everything
-     *  if nothing matches, rather than leaving the screen looking empty/broken —
-     *  the free Ticketmaster feed for one city won't always have something every weekend. */
+    -  if nothing matches, rather than leaving the screen looking empty/broken —
+    -  the free Ticketmaster feed for one city won't always have something every weekend. */
+
     private fun renderList() {
-        val filtered = allEvents.filter { matchesRange(it.date, currentRange) }
-        bindList(rootView, filtered.ifEmpty { allEvents })
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val filtered = when (currentRange) {
+            DateRange.ALL -> {
+                allEvents
+                    .filter { event ->
+                        val date = parseDate(event.date)
+                        date != null && !date.before(today.time)
+                    }
+                    .sortedBy { parseDate(it.date) }
+                    .take(10)
+            }
+
+            else -> {
+                allEvents
+                    .filter { matchesRange(it.date, currentRange) }
+                    .ifEmpty { allEvents }
+            }
+        }
+
+        bindList(rootView, filtered)
     }
 
     private fun matchesRange(isoDate: String, range: DateRange): Boolean {
@@ -106,6 +181,8 @@ class EventsFragment : Fragment(R.layout.activity_events) {
         val eventCal = Calendar.getInstance().apply { time = date }
         val today = Calendar.getInstance()
         return when (range) {
+            DateRange.ALL -> true
+
             DateRange.WEEK -> {
                 val end = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 7) }
                 !date.before(today.time) && !date.after(end.time)

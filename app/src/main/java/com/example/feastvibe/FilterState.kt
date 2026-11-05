@@ -1,37 +1,62 @@
 package com.example.feastvibe
 
 /**
- * Holds whatever the user last selected in FiltersFragment, so Explore can
- * apply it after "Show Results" is tapped. Same in-memory singleton pattern
- * as PlaceCache/FavouritesStore — resets on app restart, which is fine here.
+ * Stores the filters selected by the user.
+ * Filters are only applied after the user taps Show Results.
  */
 object FilterState {
+
     var type: PlaceType? = null
     var cuisines: Set<String> = emptySet()
     var price: String? = null
     var minRating: Double = 0.0
     var openNowOnly: Boolean = false
     var within5kmOnly: Boolean = false
-    var loadsheddingOnly: Boolean = false
-    var isActive: Boolean = false // becomes true once the user actually applies a filter
+    var isActive: Boolean = false
 
     fun matches(place: Place): Boolean {
         if (!isActive) return true
-        return (type == null || place.type == type) &&
-                (cuisines.isEmpty() || cuisines.any { c ->
-                    place.tags.any { it.contains(c, ignoreCase = true) } ||
-                            place.cuisine.contains(c, ignoreCase = true)
-                }) &&
-                (price == null || place.price == price) &&
-                (place.rating == null || place.rating >= minRating) &&
-                (!openNowOnly || place.isOpen) &&
-                (!within5kmOnly || place.distanceKm <= 5.0) &&
-                (!loadsheddingOnly || place.generatorBackup)
+
+        val matchesType =
+            type == null || place.type == type
+
+        val matchesCuisine =
+            cuisines.isEmpty() || cuisines.any { cuisine ->
+                place.tags.any {
+                    it.contains(cuisine, ignoreCase = true)
+                } || place.cuisine.contains(cuisine, ignoreCase = true)
+            }
+
+        val matchesPrice =
+            price == null || place.price == price
+
+        // A venue without a verified rating cannot pass a rating filter.
+        val matchesRating =
+            minRating == 0.0 ||
+                    (place.rating != null && place.rating >= minRating)
+
+        // Unknown opening hours cannot pass Open Now.
+        val matchesOpen =
+            !openNowOnly || place.isOpen == true
+
+        val matchesDistance =
+            !within5kmOnly || place.distanceKm <= 5.0
+
+        return matchesType &&
+                matchesCuisine &&
+                matchesPrice &&
+                matchesRating &&
+                matchesOpen &&
+                matchesDistance
     }
 
     fun reset() {
-        type = null; cuisines = emptySet(); price = null; minRating = 0.0
-        openNowOnly = false; within5kmOnly = false; loadsheddingOnly = false
+        type = null
+        cuisines = emptySet()
+        price = null
+        minRating = 0.0
+        openNowOnly = false
+        within5kmOnly = false
         isActive = false
     }
 }

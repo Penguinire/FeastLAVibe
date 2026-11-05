@@ -40,7 +40,8 @@ class SearchResultAdapter(
         holder.meta.text = "${p.area} · ${p.cuisine}"
         holder.price.text = p.price ?: "Price N/A"
         holder.distance.text = "${p.distanceKm} km"
-        holder.open.visibility = if (p.isOpen) View.VISIBLE else View.GONE
+        holder.open.visibility =
+            if (p.isOpen == true) View.VISIBLE else View.GONE
         holder.generator.visibility = if (p.generatorBackup) View.VISIBLE else View.GONE
 
         holder.tagRow.removeAllViews()

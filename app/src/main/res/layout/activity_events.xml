@@ -69,6 +69,7 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/tv_events_location"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
@@ -131,20 +132,48 @@
                 android:orientation="horizontal"
                 android:paddingBottom="4dp">
 
-                <TextView android:layout_width="wrap_content" android:layout_height="36dp"
-                    android:background="@drawable/bg_chip_selected" android:gravity="center"
-                    android:paddingHorizontal="18dp" android:text="This Weekend"
-                    android:textColor="@color/white" android:textSize="13sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_chip_selected"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="All"
+                    android:textColor="@color/white"
+                    android:textSize="13sp" />
 
-                <TextView android:layout_width="wrap_content" android:layout_height="36dp"
-                    android:layout_marginStart="8dp" android:background="@drawable/bg_chip_unselected"
-                    android:gravity="center" android:paddingHorizontal="18dp" android:text="This Week"
-                    android:textColor="@color/text_primary" android:textSize="13sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip_unselected"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="This Weekend"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
 
-                <TextView android:layout_width="wrap_content" android:layout_height="36dp"
-                    android:layout_marginStart="8dp" android:background="@drawable/bg_chip_unselected"
-                    android:gravity="center" android:paddingHorizontal="18dp" android:text="This Month"
-                    android:textColor="@color/text_primary" android:textSize="13sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip_unselected"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="This Week"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip_unselected"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="This Month"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
             </LinearLayout>
         </HorizontalScrollView>
     </LinearLayout>
@@ -279,61 +308,6 @@
                 android:layout_marginTop="12dp"
                 android:orientation="vertical" />
 
-            <LinearLayout
-                android:id="@+id/submit_card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/bg_card"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@drawable/bg_circle_pink"
-                    android:gravity="center"
-                    android:text="🎫"
-                    android:textSize="18sp" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Hosting a Vibe?"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="List your event across Pretoria &amp; Gauteng"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_submit_event"
-                    android:layout_width="wrap_content"
-                    android:layout_height="40dp"
-                    android:text="Submit"
-                    android:textColor="@color/text_primary"
-                    app:backgroundTint="@android:color/transparent"
-                    app:strokeColor="@color/divider"
-                    app:cornerRadius="20dp" />
-            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

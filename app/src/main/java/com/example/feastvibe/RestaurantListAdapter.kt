@@ -31,10 +31,23 @@ class RestaurantListAdapter(
         holder.rating.text = if (p.rating != null) "★ ${p.rating}" else "New"
         holder.meta.text = p.cuisine
         holder.area.text = "📍 ${p.area}"
-        holder.status.text = if (p.isOpen) "Open Now" else "Closed"
+        holder.status.visibility =
+            if (p.isOpen == null) View.GONE else View.VISIBLE
+
+        holder.status.text = when (p.isOpen) {
+            true -> "Open Now"
+            false -> "Closed"
+            null -> ""
+        }
+
         holder.status.setTextColor(
             holder.itemView.resources.getColor(
-                if (p.isOpen) R.color.open_green else R.color.text_secondary, null
+                if (p.isOpen == true) {
+                    R.color.open_green
+                } else {
+                    R.color.text_secondary
+                },
+                null
             )
         )
         holder.reviews.text =
