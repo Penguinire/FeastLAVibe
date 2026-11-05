@@ -85,7 +85,7 @@ class RestaurantDetailFragment : Fragment(R.layout.activity_restaurant_detail) {
             if (FavouritesStore.isFavourite(place.id)) R.drawable.ic_nav_favourite else android.R.drawable.btn_star_big_on
         )
         favIcon.setOnClickListener {
-            val nowFav = FavouritesStore.toggle(place.id)
+            val nowFav = FavouritesStore.toggle(place)
             Toast.makeText(
                 context,
                 if (nowFav) "Saved to favourites" else "Removed from favourites",

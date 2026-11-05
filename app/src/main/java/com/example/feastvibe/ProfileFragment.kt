@@ -45,6 +45,9 @@ class ProfileFragment : Fragment(R.layout.activity_profile) {
 
         setMenu(view, R.id.menu_reviews, "My Reviews")
         setMenu(view, R.id.menu_settings, "Settings")
+        view.findViewById<View>(R.id.menu_settings).setOnClickListener {
+            findNavController().navigate(R.id.settingsFragment)
+        }
         setMenu(view, R.id.menu_help, "Help & Support")
 
         val user = authRepository.currentUser

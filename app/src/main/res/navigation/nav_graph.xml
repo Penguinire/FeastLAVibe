@@ -52,6 +52,12 @@
         tools:layout="@layout/activity_profile" />
 
     <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.example.feastvibe.SettingsFragment"
+        android:label="Settings"
+        tools:layout="@layout/activity_settings" />
+
+    <fragment
         android:id="@+id/searchFragment"
         android:name="com.example.feastvibe.SearchFragment"
         android:label="Search"

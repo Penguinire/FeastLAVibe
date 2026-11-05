@@ -45,7 +45,7 @@ class FavouriteAdapter(
         holder.tag.visibility = if (holder.tag.text.isBlank()) View.GONE else View.VISIBLE
 
         holder.heart.setOnClickListener {
-            FavouritesStore.toggle(p.id)
+            FavouritesStore.toggle(p)
             onRemove()
         }
 

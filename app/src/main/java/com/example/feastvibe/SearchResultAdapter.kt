@@ -55,7 +55,7 @@ class SearchResultAdapter(
         // Local-only toggle — not persisted until Firebase favourites are connected.
         holder.favourite.text = if (FavouritesStore.isFavourite(p.id)) "❤" else "♡"
         holder.favourite.setOnClickListener {
-            val nowFav = FavouritesStore.toggle(p.id)
+            val nowFav = FavouritesStore.toggle(p)
             holder.favourite.text = if (nowFav) "❤" else "♡"
         }
 

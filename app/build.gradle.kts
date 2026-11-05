@@ -94,6 +94,8 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
 
     // Instrumented testing
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

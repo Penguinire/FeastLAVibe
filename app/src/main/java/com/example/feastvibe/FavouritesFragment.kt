@@ -149,7 +149,7 @@ class FavouritesFragment : Fragment(R.layout.activity_favourites) {
             row.findViewById<TextView>(R.id.tv_row_reviews).text =
                 if (place.reviewCount != null) "${place.reviewCount} reviews" else "No reviews yet"
             row.setOnClickListener {
-                FavouritesStore.toggle(place.id)
+                FavouritesStore.toggle(place)
                 refresh()
             }
             container.addView(row)
