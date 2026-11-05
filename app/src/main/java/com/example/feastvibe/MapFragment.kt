@@ -198,40 +198,59 @@ class MapFragment : Fragment(R.layout.activity_map) {
                 "https://maps.geoapify.com/v1/styles/osm-carto/style.json" +
                         "?apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
 
-            loadedMap.setStyle(styleUrl) {
-                val initialPoint = LatLng(
-                    selected?.lat ?: pretoriaCbd.latitude(),
-                    selected?.lng ?: pretoriaCbd.longitude()
-                )
+            android.util.Log.d(
+                "FeastVibeMap",
+                "Loading map style: $styleUrl"
+            )
 
-                loadedMap.cameraPosition = CameraPosition.Builder()
-                    .target(initialPoint)
-                    .zoom(15.5)
-                    .build()
+            loadedMap.setStyle(
+                styleUrl,
+                object : Style.OnStyleLoaded {
+                    override fun onStyleLoaded(style: Style) {
 
-                val current = selected
+                        android.util.Log.d(
+                            "FeastVibeMap",
+                            "Map style loaded successfully"
+                        )
 
-                if (current != null) {
-                    placeMarker(current)
-                } else {
-                    replaceMarkersWithSearchResults(defaultNearbyPlaces())
-                }
+                        val initialPoint = LatLng(
+                            selected?.lat ?: pretoriaCbd.latitude(),
+                            selected?.lng ?: pretoriaCbd.longitude()
+                        )
 
-                loadedMap.setOnMarkerClickListener { marker ->
-                    val placeId = marker.snippet
+                        loadedMap.cameraPosition =
+                            CameraPosition.Builder()
+                                .target(initialPoint)
+                                .zoom(15.5)
+                                .build()
 
-                    if (!placeId.isNullOrBlank()) {
-                        selected = PlaceCache.get(placeId)
-                            ?: DummyData.byId(placeId)
+                        val current = selected
 
-                        bindCard()
+                        if (current != null) {
+                            placeMarker(current)
+                        } else {
+                            replaceMarkersWithSearchResults(
+                                defaultNearbyPlaces()
+                            )
+                        }
+
+                        loadedMap.setOnMarkerClickListener { marker ->
+                            val placeId = marker.snippet
+
+                            if (!placeId.isNullOrBlank()) {
+                                selected = PlaceCache.get(placeId)
+                                    ?: DummyData.byId(placeId)
+
+                                bindCard()
+                            }
+
+                            true
+                        }
+
+                        enableLocationPuck()
                     }
-
-                    true
                 }
-
-                enableLocationPuck()
-            }
+            )
         }
     }
 
